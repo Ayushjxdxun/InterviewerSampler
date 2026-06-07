@@ -1,5 +1,5 @@
-import e from "express";
-import AsyncHandler from "express-async-handler";
+import asyncHandler from "express-async-handler";
+import User from "../models/User.js";
 import {OAuth2Client} from "google-auth-library";
 import jwt from "jsonwebtoken";
 
@@ -49,7 +49,7 @@ const registerUser = asyncHandler(async (req, res) => {
     }
 });
 
-const LoginUser = asyncHandler(async (req, res) => {
+const loginUser = asyncHandler(async (req, res) => {
     const { email, password } = req.body;
     if (!email || !password) {
         res.status(400);
@@ -84,7 +84,7 @@ const googleLogin = asyncHandler(async (req, res) => {
         res.status(401);
         throw new Error("Google account not verified");
     }
-        let user = await User.findOne({ email });
+    let user = await User.findOne({ email });
         if (user) {
             if(!user.googleId) {
                 user.googleId = googleId;
@@ -97,33 +97,66 @@ const googleLogin = asyncHandler(async (req, res) => {
                 googleId,
                 password: null,
             });
-                res.status(201).json({
-                    _id: user._id,
-                    name: user.name,
-                    email: user.email,
-                    preferredRole: user.preferredRole,
-                    token: generateToken(user._id),
-                });
-            
         }
+
+            
+    if (user) {
+        res.status(200).json({
+            _id: user._id,
+            name: user.name,
+            email: user.email,
+            preferredRole: user.preferredRole,
+            token: generateToken(user._id),
+        });
+    } else {
+        res.status(400);
+        throw new Error('Could not process user creation or login via Google.');
+    }
 });
 
-    const getUserProfile = asyncHandler(async (req, res) => {
+const getUserProfile = asyncHandler(async (req, res) => {
         if(!req.user) {
             res.status(404);
             throw new Error("User not found");
         }
-        res.json({
+        else{res.status(200).json({
             _id: req.user._id,
             name: req.user.name,
             email: req.user.email,
             preferredRole: req.user.preferredRole,
+            token: generateToken(req.user._id),
         });
-    });
+    }
+});
+
+const updateUserProfile = asyncHandler(async (req, res) => {
+    if (req.user) {
+        const user = await User.findById(req.user._id);
+        user.name = req.body.name || user.name;
+        user.email = req.body.email || user.email;
+        user.password = req.body.password || user.password;
+        user.preferredRole = req.body.preferredRole || user.preferredRole;
+        if(req.body.password) {
+            user.password = req.body.password;
+        }
+        await user.save();
+        res.status(200).json({
+            _id: user._id,
+            name: user.name,
+            email: user.email,
+            preferredRole: user.preferredRole,
+            token: generateToken(user._id),
+        });
+    } else {
+        res.status(404);
+        throw new Error("User not found");
+    }
+});
 
     export{
         registerUser,
-        LoginUser,
+        loginUser,
         googleLogin,
-        getUserProfile
-    }
+        getUserProfile,
+        updateUserProfile
+    };

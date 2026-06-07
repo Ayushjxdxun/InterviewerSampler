@@ -5,17 +5,17 @@ const storage = multer.diskStorage({
         cb(null, "uploads/");
     },
     filename: function (req, file, cb) {
-        const ext=file.extname(file.originalname);
-        const sessionId=req.param.id|| 'unknown';
-        cb(null, Date.now() + file.originalname);
+        const ext=path.extname(file.originalname);
+        const sessionId=req.params.id|| 'unknown';
+        cb(null, `${sessionId}-${Date.now()}${ext}`);
     },
 });
 
 const fileFilter=(req, file, cb) => {
-    if (file.mimetype === "audio/" || file.mimetype === "application/octet-stream") {
+    if (file.mimetype/startsWith("audio/") ||  file.mimetype === "application/octet-stream") {
         cb(null, true);
     } else {
-        cb(null, false);
+        cb(new Error("Only audio files are allowed!"), false);
     }
 }
 
