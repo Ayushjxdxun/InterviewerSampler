@@ -16,14 +16,14 @@ const router = express.Router();
 router.use(protect);
 
 // 1. Root Routes ("/")
-router.route("/").post(createSession);  // Create new session
+router.route("/")
+    .get(getSessions)      // Fetch all sessions
+    .post(createSession);  // Create new session
 
-
-router.route("/").get(getSessions);
 // 2. ID Routes ("/:id")
 router.route("/:id")
-    .get(protect, getSessionById)   // View session details
-    .delete(protect, deleteSession); // Delete session
+    .get(getSessionById)   // View session details
+    .delete(deleteSession); // Delete session
 
 // 3. Action Routes
 router.route("/:id/submit-answer").post(uploadSingleAudio, submitAnswer);
