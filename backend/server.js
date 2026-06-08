@@ -5,7 +5,7 @@ import cors from 'cors'
 import { Server } from 'socket.io'
 import connectDB from './config/db.js'
 import userRoutes from './routes/userRoutes.js'
-// import sessionRoutes from "./routes/sessionRoutes.js"
+import sessionRoutes from "./routes/sessionRoutes.js"
 import { notFound, errorHandler } from './middleware/errorMiddleware.js'
 
 dotenv.config()
@@ -58,7 +58,7 @@ app.get('/', (req, res) => {
 })
 
 app.use('/api/users', userRoutes)
-// app.use("/api/sessions", sessionRoutes)
+app.use("/api/sessions", sessionRoutes)
 
 io.on('connection', (socket) => {
     console.log(`user connected to ${socket.id}`)
