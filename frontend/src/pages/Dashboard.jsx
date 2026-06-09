@@ -1,9 +1,13 @@
 import { useState, useEffect } from "react"
 import { useSelector, useDispatch } from 'react-redux'
 import { useNavigate } from 'react-router-dom'
-import { createSession, getSessions,reset,deleteSession } from '../features/sessions/sessionSlice'
+import { createSession, getSessions, reset, deleteSession } from '../features/sessions/sessionSlice'
 import { toast } from 'react-toastify'
 import SessionCard from "../components/SessionCard"
+
+// 1. IMPORT YOUR CUSTOM HOOK
+// Note: Adjust the path below if your useSocket.js is in a different folder (e.g., '../hooks/useSocket')
+import useSocket from '../useSocket' 
 
 const ROLES = [
   "MERN Stack Developer",
@@ -36,8 +40,13 @@ const Dashboard = () => {
   const { sessions, isLoading, isGenerating, isError, message } = useSelector((state) => state.sessions);
   const isProcessing = isGenerating;
 
+  // 2. INITIALIZE THE SOCKET CONNECTION
+  // This automatically connects the user, listens for 'sessionUpdate', 
+  // and will magically redirect them to the interview page when questions are ready!
+  useSocket();
+
   const [formData, setFormData] = useState({
-    role: user.preferredRole || ROLES[0],
+    role: user?.preferredRole || ROLES[0],
     level: LEVELS[0],
     interviewType: TYPES[1].value,
     count: COUNTS[0],
@@ -61,6 +70,9 @@ const Dashboard = () => {
   const onSubmit = (e) => {
     e.preventDefault();
     dispatch(createSession(formData));
+    // Optional: You could add a toast here saying "Generating questions..." 
+    // since the user will now auto-redirect when it finishes.
+    toast.info("Generating your interview. Please wait...", { autoClose: 3000 });
   }
 
   const viewSession = (session) => {
@@ -68,11 +80,10 @@ const Dashboard = () => {
       navigate(`/review/${session._id}`);
     } else if(session.status === 'in-progress') {
       navigate(`/interview/${session._id}`);
-    }else{
-      toast.info('Session not ready yet')
+    } else {
+      toast.info('Session not ready yet. The AI is still generating questions.')
     }
   }
-
 
   const handleDelete = (e, sessionId) => {
     e.stopPropagation();
@@ -82,14 +93,12 @@ const Dashboard = () => {
     }
   }
 
-
-
   return (
     <div className="max-w-7xl mx-auto px-4 sm:px-6 py-6 sm:py-12 space-y-8 sm:space-y-12 animate-in duration-700">
 
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-slate-200 pb-6 sm:pb-8">
         <div>
-          <h1 className="text-2xl sm:text-4xl font-black text-slate-900 tracking-tight">Welcome, <span className="text-teal-600">{user.name.split(' ')[0]}</span> </h1>
+          <h1 className="text-2xl sm:text-4xl font-black text-slate-900 tracking-tight">Welcome, <span className="text-teal-600">{user?.name?.split(' ')[0]}</span> </h1>
           <p className="text-slate-500 mt-1 text-sm sm:text-lg font-medium">Ready for your technical prep?</p>
         </div>
         <div className="flex items-center gap-3">
@@ -133,9 +142,9 @@ const Dashboard = () => {
             {isProcessing ? <><span className="animate-spin h-4 w-4 border-2 border-white border-t-transparent rounded-full"></span> Generating...</> : <span className="text-sm">Start Interview</span>}
           </button>
         </form>
-</div> {/* 3. Closing div for the card moved here */}
+      </div> 
 
-      {/* HISTORY LIST (Now separate from the creation card) */}
+      {/* HISTORY LIST */}
       <div className="space-y-6 pb-20 sm:pb-0">
         <h2 className="text-xl sm:text-2xl font-black text-slate-800 flex items-center px-2"><span className="w-8 h-8 sm:w-10 sm:h-10 bg-slate-100 rounded-lg sm:rounded-xl flex items-center justify-center mr-3 text-sm sm:text-lg">📊</span> Interview History</h2>
         {isLoading && sessions.length === 0 ? (

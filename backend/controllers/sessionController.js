@@ -45,10 +45,15 @@ const createSession = asyncHandler(async (req, res) => {
     const io = req.app.get('io');
 
     // 2. Immediately respond to the client (Latency Management)
-    res.status(202).json({
+res.status(202).json({
         message: 'Session created. Generating questions asynchronously...',
-        sessionId: session._id,
-        status: 'processing',
+        _id: session._id, 
+        status: 'pending', 
+        role: session.role,
+        level: session.level,
+        interviewType: session.interviewType,
+        questions: [],
+        createdAt: session.createdAt || new Date()
     });
 
     // --- ASYNCHRONOUS BACKGROUND TASK START ---
