@@ -6,7 +6,7 @@ import { useNavigate } from 'react-router-dom';
 import io from 'socket.io-client';
 
 const BACKEND_URL = import.meta.env.VITE_API_URL.replace('/api', ''); 
-//http://localhost:8000
+
 const useSocket = () => {
   const dispatch = useDispatch();
   const navigate = useNavigate();

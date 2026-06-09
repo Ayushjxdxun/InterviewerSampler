@@ -1,6 +1,5 @@
 import { createRoot } from 'react-dom/client'
 import { StrictMode } from 'react'
-import React from 'react'
 import { Provider } from 'react-redux'
 import { GoogleOAuthProvider } from '@react-oauth/google'
 import axios from 'axios'
@@ -25,7 +24,7 @@ axios.interceptors.response.use(
 );
 
 createRoot(document.getElementById('root')).render(
-  <StrictMode>
+ 
     <GoogleOAuthProvider clientId={GOOGLE_CLIENT_ID}>
       <Provider store={store}>
         <Router>
@@ -33,6 +32,6 @@ createRoot(document.getElementById('root')).render(
         </Router>
       </Provider>
     </GoogleOAuthProvider>
-  </StrictMode>
+
   
 )

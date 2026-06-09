@@ -147,7 +147,7 @@ async def evaluate(request:EvaluationRequest):
             )
         
         system_prompt=(
-            "You are a strict technical interviewer. "
+            "You are a sstrict technical interviewer. "
             "Do NOT hallucinate positive reviews for bad input. "
             "RULE 1: If the answer is gibberish, irrelevant, or missing, return 'technicalScore':0 and 'confidenceScore':0. "
             "RULE 2: For 'idealAnswer', provide a clean Markdown string.Do NOT return a nested JSON object. "
@@ -192,7 +192,6 @@ async def evaluate(request:EvaluationRequest):
         print(f"Failed to generate response: {e}")
         raise HTTPException(status_code=500,detail=str(e))
         
+
 if __name__ == "__main__":
-    import uvicorn
-    # Using the string "main:app" allows for the reload feature
-    uvicorn.run("main:app", host="0.0.0.0", port=8000, reload=True)
+    uvicorn.run(app,host="0.0.0.0",port=AI_SERVICE_PORT)

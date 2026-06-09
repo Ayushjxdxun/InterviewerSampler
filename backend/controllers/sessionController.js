@@ -1,15 +1,18 @@
+// backend/controllers/sessionController.js
 import asyncHandler from 'express-async-handler';
 import Session from '../models/SessionModel.js';
 import fetch from 'node-fetch'; // Standard for making HTTP requests (npm install node-fetch@2.6.1)
 import fs from 'fs'; // <-- NEW: For reading and deleting the temporary file
-import path from 'path';
 import FormData from 'form-data'; // <-- NEW: For sending files to FastAPI
+import path from 'path';
 import mongoose from 'mongoose';
-
+// URL for the Python AI Microservice (Must match Step 6 setup)
 const AI_SERVICE_URL = 'http://localhost:8000';
 
 // Helper function to send an update via Socket.io
 const pushSocketUpdate = (io, userId, sessionId, status, message, session = null) => {
+    // We target the user by their ID, assuming the user's socket is joined to a room named after their userId
+    // (This room setup must be done on socket connection, which we will address later in server.js)
     io.to(userId.toString()).emit('sessionUpdate', {
         sessionId,
         status, // e.g., 'AI_GENERATING_QUESTIONS', 'QUESTIONS_READY', 'EVALUATION_FAILED'
@@ -41,18 +44,23 @@ const createSession = asyncHandler(async (req, res) => {
 
     const io = req.app.get('io');
 
+    // 2. Immediately respond to the client (Latency Management)
     res.status(202).json({
         message: 'Session created. Generating questions asynchronously...',
         sessionId: session._id,
         status: 'processing',
     });
-    ///this is an IIFE  -> immediately-invoked function expression
+
+    // --- ASYNCHRONOUS BACKGROUND TASK START ---
+
+    // Using a self-executing async function to run the process in the background
     (async () => {
         try {
             // A. Notify the user via Socket.io that processing has started
             pushSocketUpdate(io, userId, session._id, 'AI_GENERATING_QUESTIONS', `Generating ${count} questions for ${role}...`);
 
             // B. Call the Python AI Microservice
+            // backend/controllers/sessionController.js inside createSession
             const aiResponse = await fetch(`${AI_SERVICE_URL}/generate-questions`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
@@ -86,7 +94,7 @@ const createSession = asyncHandler(async (req, res) => {
             await session.save();
 
             // E. Push final result back to the client via Socket.io
-            pushSocketUpdate(io, userId, session._id, 'QUESTIONS_READY', 'Questions generated successfully. Starting session.');
+            pushSocketUpdate(io, userId, session._id, 'QUESTIONS_READY', 'Questions generated successfully. Starting session.', session);
 
         } catch (error) {
             console.error(`Session Creation Failure for ${session._id}:`, error.message);
@@ -104,10 +112,10 @@ const createSession = asyncHandler(async (req, res) => {
 // @access  Private
 const getSessions = asyncHandler(async (req, res) => {
     // Find all sessions for the logged-in user, sorted by newest first
-    const userId=req.user._id;
     const sessions = await Session.find({ user: req.user._id })
+        .sort({ createdAt: -1 })
         .select('-questions.userAnswerText -questions.userSubmittedCode'); // Exclude heavy data for list view
-    res.status(200).json(sessions);
+    res.json(sessions);
 });
 
 // @desc    Get a specific session detail
@@ -115,32 +123,37 @@ const getSessions = asyncHandler(async (req, res) => {
 // @access  Private
 const getSessionById = asyncHandler(async (req, res) => {
     // Find session by ID and ensure it belongs to the logged-in user
-    const userId = req.user._id;
-    const sessionId = req.params.id;
-    const session = await Session.findOne({ _id: sessionId, user: userId });
+    const session = await Session.findOne({ _id: req.params.id, user: req.user._id });
 
-    if (!session) {
+    if (session) {
+        res.json(session);
+    } else {
         res.status(404);
-        throw new Error('Session not found');
+        throw new Error('Session not found or user unauthorized.');
     }
-    res.status(200).json(session);
 });
 
 // @desc    Delete a session
 // @route   DELETE /api/sessions/:id
 // @access  Private
 const deleteSession = asyncHandler(async (req, res) => {
-    const userId = req.user._id;
-    const sessionId = req.params.id;
-    const session = await Session.findOne({ _id: sessionId, user: userId });
+    const session = await Session.findById(req.params.id);
+
     if (!session) {
         res.status(404);
         throw new Error('Session not found');
     }
-    await session.deleteOne();
-    res.status(200).json({ id: sessionId, message: 'Session deleted successfully' });
-});
 
+    // Check if the user owns this session
+    if (session.user.toString() !== req.user.id) {
+        res.status(401);
+        throw new Error('Not authorized');
+    }
+
+    await session.deleteOne();
+
+    res.status(200).json({ id: req.params.id });
+});
 
 const evaluateAnswerAsync = async (io, userId, sessionId, questionIndex, audioFilePath = null, code = null) => {
     // Initialize transcription as an empty string instead of null to avoid "null" text in AI prompts
@@ -179,7 +192,6 @@ const evaluateAnswerAsync = async (io, userId, sessionId, questionIndex, audioFi
             transcription = transData.transcription || "";
         } catch (error) {
             console.error(`Transcription Error: ${error.message}`);
-            pushSocketUpdate(io, userId, sessionId, 'EVALUATION_FAILED', `Transcription failed for Q${questionIdx + 1}. Reason: ${error.message}.`);
             // We continue even if transcription fails so the code can still be evaluated
         } finally {
             if (audioFilePath && fs.existsSync(audioFilePath)) fs.unlinkSync(audioFilePath);
@@ -195,7 +207,7 @@ const evaluateAnswerAsync = async (io, userId, sessionId, questionIndex, audioFi
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
                 question: question.questionText,
-                question_Type: question.questionType, // Tells AI if it should expect code
+                question_type: question.questionType, // Tells AI if it should expect code
                 role: session.role,
                 level: session.level,
                 user_answer: transcription, // Dedicated transcription field
@@ -206,6 +218,7 @@ const evaluateAnswerAsync = async (io, userId, sessionId, questionIndex, audioFi
         if (!evalResponse.ok) throw new Error('AI Evaluation service failed');
 
         const evalData = await evalResponse.json();
+
         // --- Phase 3: Correct MongoDB Mapping ---
         // Store them strictly in their respective fields
         question.userAnswerText = transcription; 
