@@ -80,39 +80,53 @@ async def generate_questions(request: QuestionResquest):
     try:
         if request.interview_type == "coding-mix":
             coding_count = int(request.count * 0.2)
-            oral_oral = int(request.count) - int(coding_count)
-            intruction = (
-                f"The first {coding_count} questions MUST be coding challenge requiring function implementation. "
-                f"The remaining {oral_oral} questions MUST be conceptual oral questions."
+            oral_count = int(request.count) - int(coding_count)
+            instruction = (
+                f"Generate exactly {request.count} questions. "
+                f"The first {coding_count} questions MUST be coding challenges requiring function implementation. "
+                f"The remaining {oral_count} questions MUST be conceptual oral questions."
             )
         else:
-            intruction = "All questions MUST be conceptual oral questions. Do Not generate any coding or implementation challenges."
+            instruction = f"Generate exactly {request.count} conceptual oral questions. Do Not generate any coding or implementation challenges."
 
+        # 1. Update system prompt to strictly demand JSON
         system_prompt = (
             "You are a professional technical interviewer. "
-            "Task: Generate interview questions. No conversational text or numbering. "
-            f"Crucial : {intruction}"
-            "Output exactly one question per line. "
+            "Output ONLY a JSON object containing a single key 'questions' which is an array of strings. "
+            "Do not include any numbering, markdown, or conversational text inside the question strings. "
+            f"Crucial: {instruction}"
         )
 
         user_prompt = (
-            f"Generate exactly {request.count} unique interview questions for a {request.level} level {request.role} "
+            f"Role: {request.role}\n"
+            f"Level: {request.level}\n"
         )
         
+        # 2. Add response_format={"type": "json_object"}
         response = client.chat.completions.create(
             model=MODEL_NAME,
             messages=[
                 {"role": "system", "content": system_prompt},
                 {"role": "user", "content": user_prompt}
             ],
+            response_format={"type": "json_object"}, 
             temperature=0.6,
         )
 
         raw_text = response.choices[0].message.content.strip()
-        questions = [q.strip() for q in raw_text.split('\n') if q.strip()]
+        
+        # 3. Safely parse the JSON
+        data = json.loads(raw_text)
+        questions = data.get("questions", [])
+
+        # Fallback safeguard in case AI returns a string instead of a list
+        if isinstance(questions, str):
+            questions = [q.strip() for q in questions.split('\n') if q.strip()]
+
         return QuestionResponse(questions=questions[:request.count], model_used=MODEL_NAME)
 
     except Exception as e:
+        print(f"Failed to generate questions: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
 @app.post("/transcribe")
@@ -142,13 +156,13 @@ async def transcribe_audio(file: UploadFile = File(...)):
 async def evaluate(request: EvaluationRequest):
     try:
         if request.question_type == "oral":
-            assessment_intruction = (
+            assessment_instruction = (
                 "This is a conceptual oral question. Focus purely on candidate's verbal explanation. "
                 "Ignore any code blocks. "
                 "CRITICAL: If the transcript is empty, nonsense (e.g. 'blah blah','testing') or irrelevant to the question, SCORE 0."
             )
         else:
-            assessment_intruction = (
+            assessment_instruction = (
                 "This is a coding challenge question. Evaluate the code logic and efficiency. "
                 "Use the transcription only for insight into their thought process. "
                 "CRITICAL: If the code is 'undefined', empty, just random comments, or random characters, SCORE 0."
@@ -159,7 +173,7 @@ async def evaluate(request: EvaluationRequest):
             "Do NOT hallucinate positive reviews for bad input. "
             "RULE 1: If the answer is gibberish, irrelevant, or missing, return 'technicalScore':0 and 'confidenceScore':0. "
             "RULE 2: For 'idealAnswer', provide a clean Markdown string. Do NOT return a nested JSON object. "
-            f"Context:{assessment_intruction}"
+            f"Context:{assessment_instruction}"
             "Respond ONLY with a JSON object. "
             "Required keys: 'technicalScore' (0-100), 'confidenceScore' (0-100), 'aiFeedback', 'idealAnswer'. "
         )
