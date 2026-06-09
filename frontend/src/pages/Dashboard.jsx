@@ -7,7 +7,7 @@ import SessionCard from "../components/SessionCard"
 
 // 1. IMPORT YOUR CUSTOM HOOK
 // Note: Adjust the path below if your useSocket.js is in a different folder (e.g., '../hooks/useSocket')
-import useSocket from '../useSocket' 
+
 
 const ROLES = [
   "MERN Stack Developer",
@@ -43,7 +43,7 @@ const Dashboard = () => {
   // 2. INITIALIZE THE SOCKET CONNECTION
   // This automatically connects the user, listens for 'sessionUpdate', 
   // and will magically redirect them to the interview page when questions are ready!
-  useSocket();
+
 
   const [formData, setFormData] = useState({
     role: user?.preferredRole || ROLES[0],
