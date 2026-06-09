@@ -19,10 +19,11 @@ const server = http.createServer(app);
 const allowedOrigins = [
     'http://localhost:5173',
     'http://localhost:5174',
-    'https://prepgen-ax15.onrender.com'
+    'https://prepgen-axl5.onrender.com'
 ];
 
 const corsOptions = {
+
     origin: function (origin, callback) {
         // allow requests with no origin (like mobile apps or curl)
         if (!origin || allowedOrigins.indexOf(origin) !== -1) {
