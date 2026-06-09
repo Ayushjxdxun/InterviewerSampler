@@ -17,10 +17,10 @@ const app = express();
 const server = http.createServer(app);
 
 const allowedOrigin = [
-    'http://localhost:5174',
     'http://localhost:5173',
-]
-
+    'http://localhost:5174',
+    'https://interview-frontend.onrender.com' // Replace with your actual Render URL
+];
 const io = new Server(server, {
     cors: {
         origin: allowedOrigin,
