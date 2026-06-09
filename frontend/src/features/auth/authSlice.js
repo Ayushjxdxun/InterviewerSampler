@@ -1,7 +1,8 @@
 import {createSlice,createAsyncThunk} from '@reduxjs/toolkit'
 import axios from 'axios'
 
-const API_URL=`${import.meta.env.VITE_API_URL}/users/`;
+// ADDED /api/ HERE
+const API_URL=`${import.meta.env.VITE_API_URL}/api/users/`;
 
 const user=JSON.parse(localStorage.getItem('user'));    
 
@@ -150,7 +151,6 @@ export const authSlice=createSlice({
         })
     }
 })
-
 
 export const {reset}=authSlice.actions;
 export default authSlice.reducer

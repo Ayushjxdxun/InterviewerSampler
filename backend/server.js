@@ -13,29 +13,35 @@ dotenv.config();
 connectDB();
 
 const app = express();
-
 const server = http.createServer(app);
 
-const allowedOrigin = [
+// Use a function for CORS origin to handle production environments more reliably
+const allowedOrigins = [
     'http://localhost:5173',
     'http://localhost:5174',
-    'https://prepgen-ax15.onrender.com' // Replace with your actual Render URL
+    'https://prepgen-ax15.onrender.com'
 ];
-const io = new Server(server, {
-    cors: {
-        origin: allowedOrigin,
-        methods: ['GET', 'POST', 'PUT', 'DELETE',  'OPTIONS'],
-        credentials: true,
-        allowedHeaders: ['Content-Type', 'Authorization'],
-    }
-})
 
-app.use(cors({
-    origin: allowedOrigin,
+const corsOptions = {
+    origin: function (origin, callback) {
+        // allow requests with no origin (like mobile apps or curl)
+        if (!origin || allowedOrigins.indexOf(origin) !== -1) {
+            callback(null, true);
+        } else {
+            callback(new Error('Not allowed by CORS'));
+        }
+    },
     credentials: true,
     methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
-    allowedHeaders: ['Content-Type', 'Authorization',"X-Requested-With"],
-}))
+    allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With'],
+};
+
+// Apply CORS to both Express and Socket.io
+app.use(cors(corsOptions));
+
+const io = new Server(server, {
+    cors: corsOptions
+});
 
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
@@ -51,9 +57,8 @@ app.use("/api/sessions", sessionRoutes);
 
 io.on("connection", (socket) => {
     console.log(`A user Connected ${socket.id}`);
-    const userId=socket.handshake.query.userId;
-    if(userId){
-
+    const userId = socket.handshake.query.userId;
+    if (userId) {
         socket.join(userId);
         console.log(`User ${socket.id} joined room: ${userId}`);
     }
@@ -68,8 +73,6 @@ app.use(errorHandler);
 
 const PORT = process.env.PORT || 5000;
 
-server.listen(
-    PORT,
-    console.log(`Server running in ${process.env.NODE_ENV} mode on port ${PORT}`)
-);
-
+server.listen(PORT, () => {
+    console.log(`Server running in ${process.env.NODE_ENV || 'development'} mode on port ${PORT}`);
+});
