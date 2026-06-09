@@ -8,14 +8,22 @@ from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from dotenv import load_dotenv
 from typing import Optional
-import ollama
+from groq import Groq
 import whisper
 from pydub import AudioSegment
 
 load_dotenv()
 
 AI_SERVICE_PORT = int(os.getenv("AI_SERVICE_PORT", 8000))
-OLLAMA_MODEL_NAME = os.getenv("OLLAMA_MODEL_NAME", "mistral")
+# Mixtral-8x7b is excellent, fast, open-source, and perfectly replaces local mistral
+MODEL_NAME = os.getenv("GROQ_MODEL_NAME", "mixtral-8x7b-32768")
+GROQ_API_KEY = os.getenv("GROQ_API_KEY")
+
+if not GROQ_API_KEY:
+    print("WARNING: GROQ_API_KEY environment variable is missing!")
+
+# Initialize cloud client
+client = Groq(api_key=GROQ_API_KEY)
 
 app = FastAPI(title="AI Interviewer Microservice", version="1.0")
 
@@ -65,7 +73,7 @@ class EvaluationResponse(BaseModel):
 
 @app.get("/")
 async def root():
-    return {"message": "Hello from AI Interviewer Microservice !", "model": OLLAMA_MODEL_NAME}
+    return {"message": "Hello from AI Interviewer Microservice !", "model": MODEL_NAME}
 
 @app.post("/generate-questions", response_model=QuestionResponse)
 async def generate_questions(request: QuestionResquest):
@@ -90,16 +98,19 @@ async def generate_questions(request: QuestionResquest):
         user_prompt = (
             f"Generate exactly {request.count} unique interview questions for a {request.level} level {request.role} "
         )
-        response = ollama.generate(
-            model=OLLAMA_MODEL_NAME,
-            prompt=user_prompt,
-            system=system_prompt,
-            options={"temperature": 0.6}
+        
+        response = client.chat.completions.create(
+            model=MODEL_NAME,
+            messages=[
+                {"role": "system", "content": system_prompt},
+                {"role": "user", "content": user_prompt}
+            ],
+            temperature=0.6,
         )
 
-        raw_text = response['response'].strip()
+        raw_text = response.choices[0].message.content.strip()
         questions = [q.strip() for q in raw_text.split('\n') if q.strip()]
-        return QuestionResponse(questions=questions[:request.count], model_used=OLLAMA_MODEL_NAME)
+        return QuestionResponse(questions=questions[:request.count], model_used=MODEL_NAME)
 
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
@@ -159,14 +170,18 @@ async def evaluate(request: EvaluationRequest):
             f"Verbal Answer: {request.user_answer or 'No verbal answer provided'}\n"
             f"Code Answer: {request.user_code or 'No code provided'}\n"
         )
-        response = ollama.generate(
-            model=OLLAMA_MODEL_NAME,
-            prompt=user_prompt,
-            system=system_prompt,
-            format="json",
-            options={"temperature": 0.1}
+        
+        response = client.chat.completions.create(
+            model=MODEL_NAME,
+            messages=[
+                {"role": "system", "content": system_prompt},
+                {"role": "user", "content": user_prompt}
+            ],
+            response_format={"type": "json_object"},
+            temperature=0.1,
         )
-        response_text = response['response'].strip()
+        
+        response_text = response.choices[0].message.content.strip()
         try:
             evaluation_data = json.loads(response_text)
             if 'idealAnswer' in evaluation_data and not isinstance(evaluation_data['idealAnswer'], str):

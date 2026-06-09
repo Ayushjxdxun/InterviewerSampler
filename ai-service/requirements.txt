@@ -2,7 +2,7 @@ fastapi
 uvicorn
 pydantic
 python-dotenv
-ollama
+groq
 openai-whisper
 pydub
 ffmpeg-python
