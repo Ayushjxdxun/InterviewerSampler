@@ -7,4 +7,3 @@ openai-whisper
 pydub
 ffmpeg-python
 python-multipart
-pyaudioop
