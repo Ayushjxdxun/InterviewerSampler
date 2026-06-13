@@ -8,7 +8,7 @@ import {
     submitAnswer
 } from "../controllers/sessionController.js";
 import { protect } from "../middleware/authMiddleware.js";
-import { uploadSingleAudio } from "../middleware/uploadMiddleware.js";
+import { uploadAudio } from "../middleware/uploadMiddleware.js";
 
 const router = express.Router();
 
@@ -26,7 +26,7 @@ router.route("/:id")
     .delete(deleteSession); // Delete session
 
 // 3. Action Routes
-router.route("/:id/submit-answer").post(uploadSingleAudio, submitAnswer);
+router.route("/:id/submit-answer").post(uploadAudio, submitAnswer);
 router.route("/:id/end").post(endSession);
 
 export default router;
