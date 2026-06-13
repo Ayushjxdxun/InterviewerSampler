@@ -15,10 +15,18 @@ const protect=asyncHandler(async(req,res,next)=>{
                 throw new Error('User not found');
             }
             next();
-        }catch(error){
+        }catch (error) {
             console.error(error);
+            
+            // Check specifically for TokenExpiredError
+            if (error.name === 'TokenExpiredError') {
+                res.status(401).json({ message: "Token expired, please log in again" });
+                return; // Stop execution here
+            }
+
+            // Default unauthorized error
             res.status(401);
-            throw new Error("Not authorised,token failed.");
+            throw new Error("Not authorized, token failed.");
         }
     }
     if(!token){
