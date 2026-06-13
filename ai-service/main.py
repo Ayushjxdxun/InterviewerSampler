@@ -1,15 +1,12 @@
 import uvicorn
 import os
-import io
 import json
-import tempfile
 from fastapi import FastAPI, HTTPException, UploadFile, File
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from dotenv import load_dotenv
 from typing import Optional
 from groq import Groq
-from pydub import AudioSegment
 
 load_dotenv()
 
@@ -83,7 +80,7 @@ async def generate_questions(request: QuestionResquest):
             "- For coding challenges, prioritize edge cases, memory optimization, and time complexity.\n"
             "- Output ONLY a JSON object with a key 'questions' (an array of strings).\n"
             "- Do not include markdown, numbering, or preamble text.\n"
-            f"Contextual Instructions: {instruction}"
+             f"Contextual Instructions: {instruction}"
         )
 
         user_prompt = (
@@ -117,29 +114,19 @@ async def generate_questions(request: QuestionResquest):
 
 @app.post("/transcribe")
 async def transcribe_audio(file: UploadFile = File(...)):
-    temp_audio_path = None
     try:
+        # Read the file directly into an in-memory byte stream
         audio_bytes = await file.read()
-        audio_in_memory = io.BytesIO(audio_bytes)
-        audio_segment = AudioSegment.from_file(audio_in_memory)
         
-        with tempfile.NamedTemporaryFile(delete=False, suffix=".mp3") as tmp:
-            temp_audio_path = tmp.name
-            audio_segment.export(temp_audio_path, format="mp3")
-        
-        # Send to Groq API instead of local model
-        with open(temp_audio_path, "rb") as audio_file:
-            transcription = client.audio.transcriptions.create(
-                file=(os.path.basename(temp_audio_path), audio_file.read()),
-                model="whisper-large-v3",
-            )
+        # Groq's SDK accepts a tuple containing (filename, bytes) instead of a physical disk file
+        transcription = client.audio.transcriptions.create(
+            file=(file.filename or "audio.webm", audio_bytes),
+            model="whisper-large-v3",
+        )
             
-        os.remove(temp_audio_path)
         return {"transcription": transcription.text.strip()}
 
     except Exception as e:
-        if temp_audio_path and os.path.exists(temp_audio_path):
-            os.remove(temp_audio_path)
         print(f"Transcription error: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
@@ -155,7 +142,7 @@ async def evaluate(request: EvaluationRequest):
             "You are a senior-level technical interviewer. "
             "RULE: If answer is gibberish or irrelevant, return technicalScore: 0. "
             "Respond ONLY with a JSON object containing keys: 'technicalScore', 'confidenceScore', 'aiFeedback', 'idealAnswer'. "
-            f"Context: {assessment_instruction}"
+             f"Context: {assessment_instruction}"
         )
         
         user_prompt = (

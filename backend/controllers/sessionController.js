@@ -2,9 +2,7 @@
 import asyncHandler from 'express-async-handler';
 import Session from '../models/SessionModel.js';
 import fetch from 'node-fetch';
-import fs from 'fs';
 import FormData from 'form-data';
-import path from 'path';
 import mongoose from 'mongoose';
 
 const AI_SERVICE_URL = process.env.AI_SERVICE_URL || 'http://localhost:8000';
@@ -69,7 +67,9 @@ const createSession = asyncHandler(async (req, res) => {
             }
 
             const aiData = await aiResponse.json();
-            const codingCount = interviewType === 'coding-mix' ? Math.floor(count * 0.2) : 0;
+            
+            // Synchronized with main.py logic (40% coding questions)
+            const codingCount = interviewType === 'coding-mix' ? Math.floor(count * 0.4) : 0;
             const questionsArray = aiData.questions.map((qText, index) => ({
                 questionText: qText,
                 questionType: index < codingCount ? 'coding' : 'oral',
@@ -123,7 +123,7 @@ const deleteSession = asyncHandler(async (req, res) => {
     res.status(200).json({ id: req.params.id });
 });
 
-const evaluateAnswerAsync = async (io, userId, sessionId, questionIndex, audioFilePath = null, code = null) => {
+const evaluateAnswerAsync = async (io, userId, sessionId, questionIndex, audioBuffer = null, originalName = null, mimeType = null, code = null) => {
     let transcription = "";
     const questionIdx = typeof questionIndex === 'string' ? parseInt(questionIndex, 10) : questionIndex;
     const session = await Session.findById(sessionId);
@@ -132,11 +132,16 @@ const evaluateAnswerAsync = async (io, userId, sessionId, questionIndex, audioFi
     const question = session.questions[questionIdx];
     if (!question) return;
 
-    if (audioFilePath) {
+    if (audioBuffer) {
         try {
             pushSocketUpdate(io, userId, sessionId, 'AI_TRANSCRIBING', `Transcribing...`);
             const formData = new FormData();
-            formData.append('file', fs.createReadStream(audioFilePath));
+            
+            // Append the buffer directly with filename and contentType options
+            formData.append('file', audioBuffer, {
+                filename: originalName || 'audio.webm',
+                contentType: mimeType || 'audio/webm',
+            });
 
             const transResponse = await fetch(`${AI_SERVICE_URL}/transcribe`, {
                 method: 'POST',
@@ -147,11 +152,11 @@ const evaluateAnswerAsync = async (io, userId, sessionId, questionIndex, audioFi
             if (transResponse.ok) {
                 const transData = await transResponse.json();
                 transcription = transData.transcription || "";
+            } else {
+                console.error(`AI Transcription Service returned status ${transResponse.status}`);
             }
         } catch (error) {
             console.error(`Transcription Error: ${error.message}`);
-        } finally {
-            if (audioFilePath && fs.existsSync(audioFilePath)) fs.unlinkSync(audioFilePath);
         }
     }
 
@@ -219,7 +224,10 @@ const submitAnswer = asyncHandler(async (req, res) => {
         throw new Error(`Question not found.`);
     }
 
-    let audioFilePath = req.file ? req.file.path : null;
+    // Extract buffer data provided by memory storage middleware
+    let audioBuffer = req.file ? req.file.buffer : null;
+    let originalName = req.file ? req.file.originalname : null;
+    let mimeType = req.file ? req.file.mimetype : null;
 
     question.isSubmitted = true;
     await session.save();
@@ -227,7 +235,7 @@ const submitAnswer = asyncHandler(async (req, res) => {
     res.status(202).json({ message: 'Processing...', status: 'received' });
 
     const io = req.app.get('io');
-    evaluateAnswerAsync(io, userId, sessionId, questionIdx, audioFilePath, code || null);
+    evaluateAnswerAsync(io, userId, sessionId, questionIdx, audioBuffer, originalName, mimeType, code || null);
 });
 
 const calculateOverallScore = async (sessionId) => {
