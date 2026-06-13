@@ -1,4 +1,3 @@
-// backend/controllers/sessionController.js
 import asyncHandler from 'express-async-handler';
 import Session from '../models/SessionModel.js';
 import fetch from 'node-fetch';
@@ -126,41 +125,42 @@ const deleteSession = asyncHandler(async (req, res) => {
 const evaluateAnswerAsync = async (io, userId, sessionId, questionIndex, audioBuffer = null, originalName = null, mimeType = null, code = null) => {
     let transcription = "";
     const questionIdx = typeof questionIndex === 'string' ? parseInt(questionIndex, 10) : questionIndex;
-    const session = await Session.findById(sessionId);
-    if (!session) return;
-
-    const question = session.questions[questionIdx];
-    if (!question) return;
-
-    if (audioBuffer) {
-        try {
-            pushSocketUpdate(io, userId, sessionId, 'AI_TRANSCRIBING', `Transcribing...`);
-            const formData = new FormData();
-            
-            // Append the buffer directly with filename and contentType options
-            formData.append('file', audioBuffer, {
-                filename: originalName || 'audio.webm',
-                contentType: mimeType || 'audio/webm',
-            });
-
-            const transResponse = await fetch(`${AI_SERVICE_URL}/transcribe`, {
-                method: 'POST',
-                body: formData,
-                headers: formData.getHeaders(),
-            });
-
-            if (transResponse.ok) {
-                const transData = await transResponse.json();
-                transcription = transData.transcription || "";
-            } else {
-                console.error(`AI Transcription Service returned status ${transResponse.status}`);
-            }
-        } catch (error) {
-            console.error(`Transcription Error: ${error.message}`);
-        }
-    }
-
+    
     try {
+        const session = await Session.findById(sessionId);
+        if (!session) return;
+
+        const question = session.questions[questionIdx];
+        if (!question) return;
+
+        if (audioBuffer) {
+            try {
+                pushSocketUpdate(io, userId, sessionId, 'AI_TRANSCRIBING', `Transcribing...`);
+                const formData = new FormData();
+                
+                // Append buffer with accurate naming context parameters
+                formData.append('file', audioBuffer, {
+                    filename: originalName || 'audio.webm',
+                    contentType: mimeType || 'audio/webm',
+                });
+
+                const transResponse = await fetch(`${AI_SERVICE_URL}/transcribe`, {
+                    method: 'POST',
+                    body: formData,
+                    headers: formData.getHeaders(),
+                });
+
+                if (transResponse.ok) {
+                    const transData = await transResponse.json();
+                    transcription = transData.transcription || "";
+                } else {
+                    console.error(`AI Transcription Service returned status ${transResponse.status}`);
+                }
+            } catch (error) {
+                console.error(`Transcription Error: ${error.message}`);
+            }
+        }
+
         pushSocketUpdate(io, userId, sessionId, 'AI_EVALUATING', `AI is analyzing...`);
         const evalResponse = await fetch(`${AI_SERVICE_URL}/evaluate`, {
             method: 'POST',
@@ -202,7 +202,11 @@ const evaluateAnswerAsync = async (io, userId, sessionId, questionIndex, audioBu
         }
     } catch (error) {
         console.error(`Evaluation Error: ${error.message}`);
-        pushSocketUpdate(io, userId, sessionId, 'EVALUATION_FAILED', `Evaluation failed.`, session);
+        pushSocketUpdate(io, userId, sessionId, 'EVALUATION_FAILED', `Evaluation failed.`, null);
+    } finally {
+        // Drop buffer reference context variables immediately to prevent Render RAM tier leakage
+        audioBuffer = null;
+        if (global.gc) global.gc();
     }
 };
 
@@ -224,7 +228,6 @@ const submitAnswer = asyncHandler(async (req, res) => {
         throw new Error(`Question not found.`);
     }
 
-    // Extract buffer data provided by memory storage middleware
     let audioBuffer = req.file ? req.file.buffer : null;
     let originalName = req.file ? req.file.originalname : null;
     let mimeType = req.file ? req.file.mimetype : null;

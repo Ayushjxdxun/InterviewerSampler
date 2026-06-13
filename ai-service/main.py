@@ -1,5 +1,6 @@
 import uvicorn
 import os
+import io
 import json
 from fastapi import FastAPI, HTTPException, UploadFile, File
 from fastapi.middleware.cors import CORSMiddleware
@@ -13,9 +14,6 @@ load_dotenv()
 AI_SERVICE_PORT = int(os.getenv("AI_SERVICE_PORT", 8000))
 MODEL_NAME = os.getenv("GROQ_MODEL_NAME", "mixtral-8x7b-32768")
 GROQ_API_KEY = os.getenv("GROQ_API_KEY")
-
-if not GROQ_API_KEY:
-    print("WARNING: GROQ_API_KEY environment variable is missing!")
 
 client = Groq(api_key=GROQ_API_KEY)
 
@@ -115,12 +113,11 @@ async def generate_questions(request: QuestionResquest):
 @app.post("/transcribe")
 async def transcribe_audio(file: UploadFile = File(...)):
     try:
-        # Read the file directly into an in-memory byte stream
         audio_bytes = await file.read()
         
-        # Groq's SDK accepts a tuple containing (filename, bytes) instead of a physical disk file
+        # Wrapped memory bytes in an io.BytesIO stream structure to prevent Groq API payload clipping
         transcription = client.audio.transcriptions.create(
-            file=(file.filename or "audio.webm", audio_bytes),
+            file=(file.filename or "audio.webm", io.BytesIO(audio_bytes)),
             model="whisper-large-v3",
         )
             
