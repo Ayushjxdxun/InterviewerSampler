@@ -1,32 +1,32 @@
-import multer from "multer";
-import path from "path";
+import multer from 'multer';
+import path from 'path';
+import { fileURLToPath } from 'url';
+import fs from 'fs';
 
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
+const uploadDir = path.join(__dirname, '../uploads/');
+
+// Ensure the directory exists
+if (!fs.existsSync(uploadDir)) {
+    fs.mkdirSync(uploadDir, { recursive: true });
+}
 
 const storage = multer.diskStorage({
     destination(req, file, cb) {
-        cb(null, "uploads/");
+        cb(null, uploadDir);
     },
     filename(req, file, cb) {
-        const ext=path.extname(file.originalname);
-        
-        const sessionId=req.params.id || 'unknown';
-        cb(null, `${sessionId}-${Date.now()}${ext}`);
+        cb(null, `${req.user._id}-${Date.now()}${path.extname(file.originalname)}`);
     },
-}); 
-
-const fileFilter = (req, file, cb) => {
-    if (file.mimetype.startsWith("audio/") || file.mimetype === "application/octet-stream") {
-        cb(null, true);
-    } else {
-        cb(new Error("Not an audio file"), false);
-    }
-};
-
-const upload = multer({
-    storage: storage,
-    fileFilter: fileFilter,
-    limits: { fileSize: 1024 * 1024 * 10 },
 });
 
-const uploadSingleAudio = upload.single("audioFile");
-export { uploadSingleAudio };
+const upload = multer({
+    storage,
+    limits: { fileSize: 10 * 1024 * 1024 }, // 10MB limit
+    fileFilter(req, file, cb) {
+        // Add logic to allow only audio/webm, audio/wav, etc.
+        cb(null, true);
+    }
+});
+
+export const uploadAudio = upload.single('audioFile');
