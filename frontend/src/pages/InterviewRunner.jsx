@@ -178,10 +178,12 @@ function InterviewRunner() {
     // ✅ 1. OPTIMISTIC UPDATE: Lock UI instantly
     setSubmittedLocal(prev => ({ ...prev, [currentQuestionIndex]: true }));
 
-    const formData = new FormData();
+const formData = new FormData();
     formData.append('questionIndex', currentQuestionIndex);
-    if (code) formData.append('code', code);
-    if (audio) formData.append('audioFile', audio, 'answer.webm');
+    formData.append('code', code || "");
+    if (audio) {
+        formData.append('audioFile', audio, 'answer.webm');
+    }
 
     // ✅ 2. Send Request
     dispatch(submitAnswer({ sessionId, formData }))

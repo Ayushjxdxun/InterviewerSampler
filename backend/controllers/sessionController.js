@@ -230,11 +230,12 @@ const submitAnswer = asyncHandler(async (req, res) => {
     }
 
     // CLONE FIX: Create a persistent copy of the buffer data so it isn't cleared when the request ends
-    let audioBuffer = req.file ? Buffer.from(req.file.buffer) : null;
-    let originalName = req.file ? req.file.originalname : null;
-    let mimeType = req.file ? req.file.mimetype : null;
+    const audioBuffer = req.file ? Buffer.from(req.file.buffer) : null;
+    const originalName = req.file ? req.file.originalname : null;
+    const mimeType = req.file ? req.file.mimetype : null;
 
     question.isSubmitted = true;
+    question.userSubmittedCode = code || "";
     await session.save();
 
     res.status(202).json({ message: 'Processing...', status: 'received' });
