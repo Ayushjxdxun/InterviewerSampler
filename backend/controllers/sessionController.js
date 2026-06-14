@@ -3,6 +3,7 @@ import Session from '../models/SessionModel.js';
 import fetch from 'node-fetch';
 import FormData from 'form-data';
 import mongoose from 'mongoose';
+import { Readable } from 'stream'; // Import added for robust in-memory stream processing
 
 const AI_SERVICE_URL = process.env.AI_SERVICE_URL || 'http://localhost:8000';
 
@@ -138,10 +139,13 @@ const evaluateAnswerAsync = async (io, userId, sessionId, questionIndex, audioBu
                 pushSocketUpdate(io, userId, sessionId, 'AI_TRANSCRIBING', `Transcribing...`);
                 const formData = new FormData();
                 
-                // Append buffer with accurate naming context parameters
-                formData.append('file', audioBuffer, {
+                // Convert the buffer to a Readable stream to handle static file uploads correctly
+                const audioStream = Readable.from(audioBuffer);
+
+                formData.append('file', audioStream, {
                     filename: originalName || 'audio.webm',
                     contentType: mimeType || 'audio/webm',
+                    knownLength: audioBuffer.length // Explicitly declare size context
                 });
 
                 const transResponse = await fetch(`${AI_SERVICE_URL}/transcribe`, {
@@ -279,7 +283,7 @@ const endSession = asyncHandler(async (req, res) => {
     session.status = 'completed';
     session.endTime = new Date();
     session.metrics = { avgTechnical: scoreSummary.avgTechnical, avgConfidence: scoreSummary.avgConfidence };
-    await session.save();
+    await save();
 
     const io = req.app.get('io');
     pushSocketUpdate(io, userId, sessionId, 'SESSION_COMPLETED', 'Ended.', session);
