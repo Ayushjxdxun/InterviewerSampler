@@ -1,8 +1,6 @@
-// frontend/src/features/sessions/sessionSlice.js
 import { createSlice, createAsyncThunk } from '@reduxjs/toolkit'
 import axios from 'axios'
 
-// ADDED /api/ HERE
 const API_URL = `${import.meta.env.VITE_API_URL}/api/sessions/`;
 
 const api = axios.create({ baseURL: API_URL })
@@ -19,7 +17,7 @@ api.interceptors.response.use(
     (error) => {
         if (error.response?.status === 401) {
             localStorage.removeItem('user');
-            window.location.href = '/login';
+            window.location.replace('/login');
         }
         return Promise.reject(error)
     }
@@ -39,7 +37,7 @@ export const getSessions = createAsyncThunk('sessions/getAll', async (_, thunkAP
         const response = await api.get('/');
         return response.data;
     } catch (error) {
-        const message = (error.response && error.response.data && error.response.data.message) || error.message || error.toString();
+        const message = (error.response?.data?.message) || error.message || error.toString();
         return thunkAPI.rejectWithValue(message);
     }
 })
@@ -49,7 +47,7 @@ export const createSession = createAsyncThunk('sessions/create', async (sessionD
         const response = await api.post('/', sessionData);
         return response.data;
     } catch (error) {
-        const message = (error.response && error.response.data && error.response.data.message) || error.message || error.toString();
+        const message = (error.response?.data?.message) || error.message || error.toString();
         return thunkAPI.rejectWithValue(message);
     }
 })
@@ -59,7 +57,7 @@ export const getSessionById = createAsyncThunk('sessions/getOne', async (session
         const response = await api.get(`/${sessionId}`);
         return response.data;
     } catch (error) {
-        const message = (error.response && error.response.data && error.response.data.message) || error.message || error.toString();
+        const message = (error.response?.data?.message) || error.message || error.toString();
         return thunkAPI.rejectWithValue(message);
     }
 })
@@ -68,9 +66,8 @@ export const deleteSession = createAsyncThunk('sessions/delete', async (sessionI
     try {
         const response = await api.delete(`/${sessionId}`);
         return response.data.id;
-    }
-    catch (error) {
-        const message = (error.response && error.response.data && error.response.data.message) || error.message || error.toString();
+    } catch (error) {
+        const message = (error.response?.data?.message) || error.message || error.toString();
         return thunkAPI.rejectWithValue(message);
     }
 })
@@ -79,9 +76,8 @@ export const submitAnswer = createAsyncThunk('sessions/submitAnswer', async ({ s
     try {
         const response = await api.post(`/${sessionId}/submit-answer`, formData);
         return response.data;
-    }
-    catch (error) {
-        const message = (error.response && error.response.data && error.response.data.message) || error.message || error.toString();
+    } catch (error) {
+        const message = (error.response?.data?.message) || error.message || error.toString();
         return thunkAPI.rejectWithValue(message);
     }
 })
@@ -90,11 +86,9 @@ export const endSession = createAsyncThunk('sessions/endSession', async (session
     try {
         const response = await api.post(`/${sessionId}/end`);
         return response.data;
-    }
-    catch (error) {
-        const message = (error.response && error.response.data && error.response.data.message) || error.message || error.toString();
+    } catch (error) {
+        const message = (error.response?.data?.message) || error.message || error.toString();
         return thunkAPI.rejectWithValue(message);
-
     }
 })
 
@@ -118,7 +112,7 @@ export const sessionSlice = createSlice({
 
             if (session && state.activeSession && state.activeSession._id === sessionId) {
                 state.activeSession.questions = state.activeSession.questions.map((currentQ, index) => {
-                    const incomingQ = session.questions[index];
+                    const incomingQ = session?.questions?.[index];
                     if (!incomingQ) return currentQ;
                     if (incomingQ.isEvaluated) return incomingQ;
                     if (currentQ.isSubmitted && !incomingQ.isSubmitted) return currentQ;
@@ -135,7 +129,6 @@ export const sessionSlice = createSlice({
     },
     extraReducers: (builder) => {
         builder
-            
             .addCase(getSessions.pending, (state) => { state.isLoading = true; })
             .addCase(getSessions.fulfilled, (state, action) => {
                 state.isLoading = false;
@@ -161,19 +154,11 @@ export const sessionSlice = createSlice({
                 state.isLoading = false;
                 state.sessions = state.sessions.filter(s => s._id !== action.payload);
             })
-         
-            .addCase(submitAnswer.pending, (state) => {
-                // Do NOT set global isLoading here, or it freezes the whole app.
-                // We handle button loading locally in the component.
-            })
             .addCase(submitAnswer.fulfilled, (state, action) => {
-                state.isLoading = false; 
-
-              
+                state.isLoading = false;
                 if (action.payload && Array.isArray(action.payload.questions)) {
                     state.activeSession = action.payload;
                 }
-                
             })
             .addCase(submitAnswer.rejected, (state, action) => {
                 state.isError = true;

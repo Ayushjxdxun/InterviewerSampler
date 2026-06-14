@@ -78,7 +78,7 @@ function SessionReview() {
         );
     }
 
-    const { overallScore, metrics, role, level, questions, startTime, endTime } = activeSession;
+    const { overallScore, metrics, role, level, questions = [], startTime, endTime } = activeSession;
     const finalMetrics = metrics || {};
 
     const barData = {

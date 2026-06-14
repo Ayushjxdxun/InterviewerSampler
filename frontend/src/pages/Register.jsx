@@ -1,7 +1,7 @@
 import {useState,useEffect} from 'react'
 import {useSelector,useDispatch} from 'react-redux'
 import {register,reset} from '../features/auth/authSlice'
-import { useNavigate,Link } from 'react-router-dom'
+import { useNavigate, Link } from 'react-router-dom'
 import {toast} from 'react-toastify'
 
 
@@ -27,14 +27,12 @@ const Register = () => {
       toast.error(message)
       dispatch(reset())
     }
-    if(isSuccess ){
-      toast.success('User Registered Successfully')
-      navigate('/')
-      dispatch(reset())
-    }
-    if(user && !isSuccess){
-      navigate('/')
-      
+    if (isSuccess || user) {
+      if (isSuccess) {
+        toast.success('User Registered Successfully');
+      }
+      navigate('/');
+      dispatch(reset()); 
     }
   }, [user,isError,isSuccess,message,navigate,dispatch])
 

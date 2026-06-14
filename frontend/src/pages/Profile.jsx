@@ -23,7 +23,7 @@ const ROLES = [
   "QA Automation Engineer",
   "Product Manager"
 ];
-const inputBase = 'w-full bg-slate-50 border-2 border-transparent rounded-xl sm:rounded-2xl p-3.5  sm-4 fornt-semibold text-slate-700 text-base transition-all focus:bg-white focus:border-teal-500 outline-none';
+const inputBase = 'w-full bg-slate-50 border-2 border-transparent rounded-xl sm:rounded-2xl p-3.5  sm:p-4 font-semibold text-slate-700 text-base transition-all focus:bg-white focus:border-teal-500 outline-none';
 const Profile = () => {
   const dispatch = useDispatch();
   const { user, isSuccess, isError, message, isProfileLoading } = useSelector((state) => state.auth);
@@ -90,7 +90,7 @@ const Profile = () => {
           <FormField label="Email Address (Fixed)" muted>
             <input
               type="email"
-              className='w-full bg-slate-100 rounded-xl sm:rounded-2xl p-3.5  sm-4 fornt-semibold text-slate-500 text-base cursor-not-allowed'
+              className='w-full bg-slate-100 rounded-xl sm:rounded-2xl p-3.5  sm:p-4 font-semibold text-slate-500 text-base cursor-not-allowed'
               disabled
               value={formData.email}
               onChange={handleChange}
