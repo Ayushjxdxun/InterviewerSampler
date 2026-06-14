@@ -3,7 +3,7 @@ import Session from '../models/SessionModel.js';
 import fetch from 'node-fetch';
 import FormData from 'form-data';
 import mongoose from 'mongoose';
-import { Readable } from 'stream'; // Import added for robust in-memory stream processing
+import { Readable } from 'stream';
 
 const AI_SERVICE_URL = process.env.AI_SERVICE_URL || 'http://localhost:8000';
 
@@ -68,7 +68,6 @@ const createSession = asyncHandler(async (req, res) => {
 
             const aiData = await aiResponse.json();
             
-            // Synchronized with main.py logic (40% coding questions)
             const codingCount = interviewType === 'coding-mix' ? Math.floor(count * 0.4) : 0;
             const questionsArray = aiData.questions.map((qText, index) => ({
                 questionText: qText,
@@ -139,13 +138,12 @@ const evaluateAnswerAsync = async (io, userId, sessionId, questionIndex, audioBu
                 pushSocketUpdate(io, userId, sessionId, 'AI_TRANSCRIBING', `Transcribing...`);
                 const formData = new FormData();
                 
-                // Convert the buffer to a Readable stream to handle static file uploads correctly
                 const audioStream = Readable.from(audioBuffer);
 
                 formData.append('file', audioStream, {
                     filename: originalName || 'audio.webm',
                     contentType: mimeType || 'audio/webm',
-                    knownLength: audioBuffer.length // Explicitly declare size context
+                    knownLength: audioBuffer.length
                 });
 
                 const transResponse = await fetch(`${AI_SERVICE_URL}/transcribe`, {
@@ -208,7 +206,6 @@ const evaluateAnswerAsync = async (io, userId, sessionId, questionIndex, audioBu
         console.error(`Evaluation Error: ${error.message}`);
         pushSocketUpdate(io, userId, sessionId, 'EVALUATION_FAILED', `Evaluation failed.`, null);
     } finally {
-        // Drop buffer reference context variables immediately to prevent Render RAM tier leakage
         audioBuffer = null;
         if (global.gc) global.gc();
     }
@@ -232,7 +229,8 @@ const submitAnswer = asyncHandler(async (req, res) => {
         throw new Error(`Question not found.`);
     }
 
-    let audioBuffer = req.file ? req.file.buffer : null;
+    // CLONE FIX: Create a persistent copy of the buffer data so it isn't cleared when the request ends
+    let audioBuffer = req.file ? Buffer.from(req.file.buffer) : null;
     let originalName = req.file ? req.file.originalname : null;
     let mimeType = req.file ? req.file.mimetype : null;
 
@@ -283,7 +281,9 @@ const endSession = asyncHandler(async (req, res) => {
     session.status = 'completed';
     session.endTime = new Date();
     session.metrics = { avgTechnical: scoreSummary.avgTechnical, avgConfidence: scoreSummary.avgConfidence };
-    await save();
+    
+    // TYPO FIX: Changed from standalone save() to session.save()
+    await session.save();
 
     const io = req.app.get('io');
     pushSocketUpdate(io, userId, sessionId, 'SESSION_COMPLETED', 'Ended.', session);
