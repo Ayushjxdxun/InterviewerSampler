@@ -16,7 +16,7 @@ const pushSocketUpdate = (io, userId, sessionId, status, message, session = null
     });
 };
 
-const createSession = asyncHandler(async (req, res) => {
+export const createSession = asyncHandler(async (req, res) => {
     const { role, level, interviewType, count } = req.body;
     const userId = req.user._id;
 
@@ -53,12 +53,7 @@ const createSession = asyncHandler(async (req, res) => {
             const aiResponse = await fetch(`${AI_SERVICE_URL}/generate-questions`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                    role,
-                    level,
-                    count,
-                    interview_type: interviewType
-                }),
+                body: JSON.stringify({ role, level, count, interview_type: interviewType }),
             });
 
             if (!aiResponse.ok) {
@@ -67,7 +62,6 @@ const createSession = asyncHandler(async (req, res) => {
             }
 
             const aiData = await aiResponse.json();
-            
             const codingCount = interviewType === 'coding-mix' ? Math.floor(count * 0.4) : 0;
             const questionsArray = aiData.questions.map((qText, index) => ({
                 questionText: qText,
@@ -81,7 +75,6 @@ const createSession = asyncHandler(async (req, res) => {
             await session.save();
 
             pushSocketUpdate(io, userId, session._id, 'QUESTIONS_READY', 'Questions generated successfully.', session);
-
         } catch (error) {
             console.error(`Session Creation Failure for ${session._id}:`, error.message);
             session.status = 'failed';
@@ -91,14 +84,14 @@ const createSession = asyncHandler(async (req, res) => {
     })();
 });
 
-const getSessions = asyncHandler(async (req, res) => {
+export const getSessions = asyncHandler(async (req, res) => {
     const sessions = await Session.find({ user: req.user._id })
         .sort({ createdAt: -1 })
         .select('-questions.userAnswerText -questions.userSubmittedCode');
     res.json(sessions);
 });
 
-const getSessionById = asyncHandler(async (req, res) => {
+export const getSessionById = asyncHandler(async (req, res) => {
     const session = await Session.findOne({ _id: req.params.id, user: req.user._id });
     if (session) {
         res.json(session);
@@ -108,7 +101,7 @@ const getSessionById = asyncHandler(async (req, res) => {
     }
 });
 
-const deleteSession = asyncHandler(async (req, res) => {
+export const deleteSession = asyncHandler(async (req, res) => {
     const session = await Session.findById(req.params.id);
     if (!session) {
         res.status(404);
@@ -122,14 +115,13 @@ const deleteSession = asyncHandler(async (req, res) => {
     res.status(200).json({ id: req.params.id });
 });
 
-const evaluateAnswerAsync = async (io, userId, sessionId, questionIndex, audioBuffer = null, originalName = null, mimeType = null, code = null) => {
+const evaluateAnswerAsync = async (io, userId, sessionId, questionIndex, audioBuffer, originalName, mimeType, code) => {
     let transcription = "";
     const questionIdx = typeof questionIndex === 'string' ? parseInt(questionIndex, 10) : questionIndex;
     
     try {
         const session = await Session.findById(sessionId);
         if (!session) return;
-
         const question = session.questions[questionIdx];
         if (!question) return;
 
@@ -137,10 +129,7 @@ const evaluateAnswerAsync = async (io, userId, sessionId, questionIndex, audioBu
             try {
                 pushSocketUpdate(io, userId, sessionId, 'AI_TRANSCRIBING', `Transcribing...`);
                 const formData = new FormData();
-                
-                const audioStream = Readable.from(audioBuffer);
-
-                formData.append('file', audioStream, {
+                formData.append('file', Readable.from(audioBuffer), {
                     filename: originalName || 'audio.webm',
                     contentType: mimeType || 'audio/webm',
                     knownLength: audioBuffer.length
@@ -155,8 +144,6 @@ const evaluateAnswerAsync = async (io, userId, sessionId, questionIndex, audioBu
                 if (transResponse.ok) {
                     const transData = await transResponse.json();
                     transcription = transData.transcription || "";
-                } else {
-                    console.error(`AI Transcription Service returned status ${transResponse.status}`);
                 }
             } catch (error) {
                 console.error(`Transcription Error: ${error.message}`);
@@ -189,7 +176,6 @@ const evaluateAnswerAsync = async (io, userId, sessionId, questionIndex, audioBu
         question.isEvaluated = true;
 
         const allQuestionsEvaluated = session.questions.every(q => q.isEvaluated);
-
         if (allQuestionsEvaluated) {
             const scoreSummary = await calculateOverallScore(sessionId);
             session.overallScore = scoreSummary.overallScore || 0;
@@ -205,17 +191,12 @@ const evaluateAnswerAsync = async (io, userId, sessionId, questionIndex, audioBu
     } catch (error) {
         console.error(`Evaluation Error: ${error.message}`);
         pushSocketUpdate(io, userId, sessionId, 'EVALUATION_FAILED', `Evaluation failed.`, null);
-    } finally {
-        audioBuffer = null;
-        if (global.gc) global.gc();
     }
 };
 
 export const submitAnswer = asyncHandler(async (req, res) => {
     const sessionId = req.params.id;
     const userId = req.user._id;
-
-    // Use explicit body extraction
     const { questionIndex, code } = req.body;
 
     const session = await Session.findById(sessionId);
@@ -227,23 +208,25 @@ export const submitAnswer = asyncHandler(async (req, res) => {
     const questionIdx = parseInt(questionIndex, 10);
     const question = session.questions[questionIdx];
     
-    // Save the code immediately if provided
     question.userSubmittedCode = code || "";
     question.isSubmitted = true;
     await session.save();
 
-    // Prepare for async processing
-    const audioBuffer = req.file ? Buffer.from(req.file.buffer) : null;
-    const originalName = req.file ? req.file.originalname : null;
-    const mimeType = req.file ? req.file.mimetype : null;
+    res.status(202).json({ message: 'Processing...', status: 'received' });
 
-    res.status(202).json({ message: 'Submission received' });
-
-    const io = req.app.get('io');
-    evaluateAnswerAsync(io, userId, sessionId, questionIdx, audioBuffer, originalName, mimeType, code || "");
+    evaluateAnswerAsync(
+        req.app.get('io'), 
+        userId, 
+        sessionId, 
+        questionIdx, 
+        req.file ? Buffer.from(req.file.buffer) : null, 
+        req.file?.originalname, 
+        req.file?.mimetype, 
+        code || ""
+    );
 });
 
-const calculateOverallScore = async (sessionId) => {
+export const calculateOverallScore = async (sessionId) => {
     const results = await Session.aggregate([
         { $match: { _id: new mongoose.Types.ObjectId(sessionId) } },
         { $unwind: '$questions' },
@@ -266,7 +249,7 @@ const calculateOverallScore = async (sessionId) => {
     return results[0] || { overallScore: 0, avgTechnical: 0, avgConfidence: 0 };
 };
 
-const endSession = asyncHandler(async (req, res) => {
+export const endSession = asyncHandler(async (req, res) => {
     const sessionId = req.params.id;
     const userId = req.user._id;
     const session = await Session.findById(sessionId);
@@ -281,13 +264,8 @@ const endSession = asyncHandler(async (req, res) => {
     session.status = 'completed';
     session.endTime = new Date();
     session.metrics = { avgTechnical: scoreSummary.avgTechnical, avgConfidence: scoreSummary.avgConfidence };
-    
-    // TYPO FIX: Changed from standalone save() to session.save()
     await session.save();
 
-    const io = req.app.get('io');
-    pushSocketUpdate(io, userId, sessionId, 'SESSION_COMPLETED', 'Ended.', session);
+    pushSocketUpdate(req.app.get('io'), userId, sessionId, 'SESSION_COMPLETED', 'Ended.', session);
     res.json({ message: 'Session ended.', session });
 });
-
-export { createSession, getSessionById, getSessions, submitAnswer, endSession, calculateOverallScore, deleteSession };
