@@ -76,10 +76,7 @@ export const submitAnswer = createAsyncThunk('sessions/submitAnswer', async ({ s
     try {
         const response = await api.post(`/${sessionId}/submit-answer`, formData);
         return response.data;
-    } catch (error) {
-        const message = (error.response?.data?.message) || error.message || error.toString();
-        return thunkAPI.rejectWithValue(message);
-    }
+    } catch (error) {return thunkAPI.rejectWithValue(error.response?.data?.message || error.message);}
 })
 
 export const endSession = createAsyncThunk('sessions/endSession', async (sessionId, thunkAPI) => {

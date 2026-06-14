@@ -162,7 +162,7 @@ function InterviewRunner() {
     }
   };
 
-  const handleSubmitAnswer = async () => {
+const handleSubmitAnswer = async () => {
     if (isQuestionLocked) return;
     if (isRecording) stopRecording();
 
@@ -171,30 +171,29 @@ function InterviewRunner() {
     const audio = draft?.audioBlob;
 
     if (!code && !audio) {
-      toast.warning("Please provide code or an audio answer.");
-      return;
+        toast.warning("Please provide code or an audio answer.");
+        return;
     }
 
-    // ✅ 1. OPTIMISTIC UPDATE: Lock UI instantly
     setSubmittedLocal(prev => ({ ...prev, [currentQuestionIndex]: true }));
 
-const formData = new FormData();
+    // Create a fresh FormData instance for this specific submission
+    const formData = new FormData();
     formData.append('questionIndex', currentQuestionIndex);
-    formData.append('code', code || "");
+    formData.append('code', code || ""); 
+    
     if (audio) {
         formData.append('audioFile', audio, 'answer.webm');
     }
 
-    // ✅ 2. Send Request
+    // Dispatch the unified submission
     dispatch(submitAnswer({ sessionId, formData }))
       .unwrap()
       .catch((err) => {
-        // If backend fails, UNLOCK so user can try again
         setSubmittedLocal(prev => ({ ...prev, [currentQuestionIndex]: false }));
         toast.error("Submission failed. Please try again.");
       });
-  };
-
+};
   const handleFinishInterview = () => {
     if (!window.confirm("Are you sure you want to finish?")) return;
 

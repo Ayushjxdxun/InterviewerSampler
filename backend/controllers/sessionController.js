@@ -211,10 +211,12 @@ const evaluateAnswerAsync = async (io, userId, sessionId, questionIndex, audioBu
     }
 };
 
-const submitAnswer = asyncHandler(async (req, res) => {
+export const submitAnswer = asyncHandler(async (req, res) => {
     const sessionId = req.params.id;
-    const { questionIndex, code } = req.body;
     const userId = req.user._id;
+
+    // Use explicit body extraction
+    const { questionIndex, code } = req.body;
 
     const session = await Session.findById(sessionId);
     if (!session || session.user.toString() !== userId.toString()) {
@@ -224,24 +226,21 @@ const submitAnswer = asyncHandler(async (req, res) => {
 
     const questionIdx = parseInt(questionIndex, 10);
     const question = session.questions[questionIdx];
-    if (!question) {
-        res.status(400);
-        throw new Error(`Question not found.`);
-    }
+    
+    // Save the code immediately if provided
+    question.userSubmittedCode = code || "";
+    question.isSubmitted = true;
+    await session.save();
 
-    // CLONE FIX: Create a persistent copy of the buffer data so it isn't cleared when the request ends
+    // Prepare for async processing
     const audioBuffer = req.file ? Buffer.from(req.file.buffer) : null;
     const originalName = req.file ? req.file.originalname : null;
     const mimeType = req.file ? req.file.mimetype : null;
 
-    question.isSubmitted = true;
-    question.userSubmittedCode = code || "";
-    await session.save();
-
-    res.status(202).json({ message: 'Processing...', status: 'received' });
+    res.status(202).json({ message: 'Submission received' });
 
     const io = req.app.get('io');
-    evaluateAnswerAsync(io, userId, sessionId, questionIdx, audioBuffer, originalName, mimeType, code || null);
+    evaluateAnswerAsync(io, userId, sessionId, questionIdx, audioBuffer, originalName, mimeType, code || "");
 });
 
 const calculateOverallScore = async (sessionId) => {
