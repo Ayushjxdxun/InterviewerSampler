@@ -10,7 +10,12 @@ import { notFound, errorHandler } from "./middleware/errorMiddleware.js";
 
 dotenv.config();
 
-connectDB();
+// Connect to database only when a MONGO_URI is provided.
+if (process.env.MONGO_URI) {
+    connectDB();
+} else {
+    console.warn('MONGO_URI not set — skipping DB connection. Some features will be disabled.');
+}
 
 const app = express();
 const server = http.createServer(app);
@@ -19,7 +24,8 @@ const server = http.createServer(app);
 const allowedOrigins = [
     'http://localhost:5173',
     'http://localhost:5174',
-    'https://prepgen-axl5.onrender.com'
+    'https://prepgen-axl5.onrender.com',
+    'https://prepgen-axl5.onrender.com/'
 ];
 
 const corsOptions = {

@@ -62,9 +62,12 @@ export const createSession = asyncHandler(async (req, res) => {
             }
 
             const aiData = await aiResponse.json();
-            const codingCount = interviewType === 'coding-mix' ? Math.floor(count * 0.4) : 0;
-            const questionsArray = aiData.questions.map((qText, index) => ({
-                questionText: qText,
+            const codingCount = interviewType === 'coding-mix' ? Math.floor(Number(count) * 0.4) : 0;
+
+            // Defensive: ensure we received an array of questions
+            const rawQuestions = (aiData && Array.isArray(aiData.questions)) ? aiData.questions : [];
+            const questionsArray = rawQuestions.map((qText, index) => ({
+                questionText: String(qText || '').trim(),
                 questionType: index < codingCount ? 'coding' : 'oral',
                 isEvaluated: false,
                 isSubmitted: false,
@@ -76,10 +79,16 @@ export const createSession = asyncHandler(async (req, res) => {
 
             pushSocketUpdate(io, userId, session._id, 'QUESTIONS_READY', 'Questions generated successfully.', session);
         } catch (error) {
-            console.error(`Session Creation Failure for ${session._id}:`, error.message);
-            session.status = 'failed';
-            await session.save();
-            pushSocketUpdate(io, userId, session._id, 'GENERATION_FAILED', `Generation failed: ${error.message}.`);
+            console.error(`Session Creation Failure:`, error);
+            try {
+                if (session) {
+                    session.status = 'failed';
+                    await session.save();
+                    pushSocketUpdate(io, userId, session._id, 'GENERATION_FAILED', `Generation failed: ${error.message}.`);
+                }
+            } catch (e) {
+                console.error('Failed to mark session as failed', e);
+            }
         }
     })();
 });
@@ -107,7 +116,9 @@ export const deleteSession = asyncHandler(async (req, res) => {
         res.status(404);
         throw new Error('Session not found');
     }
-    if (session.user.toString() !== req.user.id) {
+    // Normalize user id checks - middleware sets `req.user` as the full user doc
+    const requestUserId = req.user && (req.user._id ? req.user._id.toString() : (req.user.id ? req.user.id.toString() : null));
+    if (!requestUserId || session.user.toString() !== requestUserId) {
         res.status(401);
         throw new Error('Not authorized');
     }
@@ -206,8 +217,12 @@ export const submitAnswer = asyncHandler(async (req, res) => {
     }
 
     const questionIdx = parseInt(questionIndex, 10);
-    const question = session.questions[questionIdx];
-    
+    const question = session.questions && session.questions[questionIdx];
+    if (!question) {
+        res.status(400);
+        throw new Error('Invalid question index');
+    }
+
     question.userSubmittedCode = code || "";
     question.isSubmitted = true;
     await session.save();
