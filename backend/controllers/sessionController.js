@@ -4,6 +4,7 @@ import fetch from 'node-fetch';
 import FormData from 'form-data';
 import mongoose from 'mongoose';
 import { Readable } from 'stream';
+import { normalizeScoreValue } from '../utils/scoreUtils.js';
 
 const AI_SERVICE_URL = process.env.AI_SERVICE_URL || 'http://localhost:8000';
 
@@ -180,10 +181,10 @@ const evaluateAnswerAsync = async (io, userId, sessionId, questionIndex, audioBu
 
         question.userAnswerText = transcription;
         question.userSubmittedCode = code || "";
-        question.technicalScore = evalData.technicalScore;
-        question.confidenceScore = evalData.confidenceScore;
-        question.aiFeedback = evalData.aiFeedback;
-        question.idealAnswer = evalData.idealAnswer;
+        question.technicalScore = normalizeScoreValue(evalData.technicalScore);
+        question.confidenceScore = normalizeScoreValue(evalData.confidenceScore);
+        question.aiFeedback = evalData.aiFeedback || 'Good effort. Add a little more structure to strengthen your answer.';
+        question.idealAnswer = evalData.idealAnswer || 'Pending evaluation.';
         question.isEvaluated = true;
 
         const allQuestionsEvaluated = session.questions.every(q => q.isEvaluated);

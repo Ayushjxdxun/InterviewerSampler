@@ -23,6 +23,78 @@ api.interceptors.response.use(
     }
 )
 
+const VALID_ROLES = [
+    'MERN Stack Developer',
+    'MEAN Stack Developer',
+    'Full Stack Python',
+    'Full Stack Java',
+    'Frontend Developer',
+    'Backend Developer',
+    'Data Scientist',
+    'Data Analyst',
+    'Machine Learning Engineer',
+    'DevOps Engineer',
+    'Cloud Engineer (AWS/Azure/GCP)',
+    'Cybersecurity Engineer',
+    'Blockchain Developer',
+    'Mobile Developer (iOS/Android)',
+    'Game Developer',
+    'UI/UX Designer',
+    'QA Automation Engineer',
+    'Product Manager'
+];
+
+const normalizeRole = (value) => {
+    const trimmed = String(value || '').trim();
+    if (!trimmed) return 'MERN Stack Developer';
+    const match = VALID_ROLES.find((role) => role.toLowerCase() === trimmed.toLowerCase());
+    return match || 'MERN Stack Developer';
+};
+
+const normalizeScoreValue = (value) => {
+    if (value === null || value === undefined || value === '') return 0;
+    if (typeof value === 'number') {
+        if (!Number.isFinite(value)) return 0;
+        if (value > 10 && value <= 100) return value;
+        if (value >= 0 && value <= 10) return value * 10;
+        return value;
+    }
+    const trimmed = String(value).trim();
+    if (!trimmed) return 0;
+    const slashMatch = trimmed.match(/^(\d+(?:\.\d+)?)\s*\/\s*(\d+(?:\.\d+)?)$/i);
+    if (slashMatch) {
+        const numerator = Number(slashMatch[1]);
+        const denominator = Number(slashMatch[2]);
+        if (!Number.isFinite(numerator) || !Number.isFinite(denominator) || denominator <= 0) return 0;
+        return Math.min(100, (numerator / denominator) * 100);
+    }
+    const parsed = Number(trimmed);
+    if (Number.isFinite(parsed)) {
+        if (parsed > 10 && parsed <= 100) return parsed;
+        if (parsed >= 0 && parsed <= 10) return parsed * 10;
+        return parsed;
+    }
+    return 0;
+};
+
+const normalizeScores = (session) => {
+    if (!session) return session;
+    return {
+        ...session,
+        role: normalizeRole(session.role),
+        overallScore: normalizeScoreValue(session.overallScore),
+        metrics: session.metrics ? {
+            avgTechnical: normalizeScoreValue(session.metrics.avgTechnical),
+            avgConfidence: normalizeScoreValue(session.metrics.avgConfidence)
+        } : { avgTechnical: 0, avgConfidence: 0 },
+        questions: Array.isArray(session.questions) ? session.questions.map((question) => ({
+            ...question,
+            technicalScore: normalizeScoreValue(question?.technicalScore),
+            confidenceScore: normalizeScoreValue(question?.confidenceScore),
+        })) : []
+    };
+};
+
 const initialState = {
     sessions: [],
     activeSession: null,
@@ -35,7 +107,7 @@ const initialState = {
 export const getSessions = createAsyncThunk('sessions/getAll', async (_, thunkAPI) => {
     try {
         const response = await api.get('/');
-        return response.data;
+        return (response.data || []).map(normalizeScores);
     } catch (error) {
         const message = (error.response?.data?.message) || error.message || error.toString();
         return thunkAPI.rejectWithValue(message);
@@ -55,7 +127,7 @@ export const createSession = createAsyncThunk('sessions/create', async (sessionD
 export const getSessionById = createAsyncThunk('sessions/getOne', async (sessionId, thunkAPI) => {
     try {
         const response = await api.get(`/${sessionId}`);
-        return response.data;
+        return normalizeScores(response.data);
     } catch (error) {
         const message = (error.response?.data?.message) || error.message || error.toString();
         return thunkAPI.rejectWithValue(message);

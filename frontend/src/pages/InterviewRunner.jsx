@@ -47,6 +47,14 @@ const ROLE_LANGUAGE_MAP = {
   "UI/UX Designer": "css",
   "Product Manager": "markdown"
 };
+const normalizeDisplayScore = (value) => {
+  const numeric = Number(value);
+  if (!Number.isFinite(numeric)) return 0;
+  if (numeric > 10 && numeric <= 100) return numeric;
+  if (numeric >= 0 && numeric <= 10) return numeric * 10;
+  return numeric;
+};
+
 function InterviewRunner() {
   const { sessionId } = useParams();
   const navigate = useNavigate();
@@ -307,7 +315,7 @@ const handleSubmitAnswer = async () => {
           <h3 className="text-emerald-800 font-bold mb-2">💡 AI Feedback</h3>
           <p className="text-emerald-700 text-sm leading-relaxed">{currentQuestion.aiFeedback}</p>
           <div className="mt-4 flex gap-4">
-            <span className="bg-white px-3 py-1 rounded-lg text-xs font-bold text-emerald-600 shadow-sm">Score: {currentQuestion.technicalScore}/100</span>
+            <span className="bg-white px-3 py-1 rounded-lg text-xs font-bold text-emerald-600 shadow-sm">Score: {normalizeDisplayScore(currentQuestion.technicalScore)}/100</span>
           </div>
         </div>
       )}

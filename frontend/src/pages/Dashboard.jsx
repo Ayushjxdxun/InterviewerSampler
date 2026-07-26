@@ -33,6 +33,13 @@ const LEVELS = ["Junior", "Mid-Level", "Senior"];
 const TYPES = [{ label: 'Oral only', value: 'oral-only' }, { label: 'Coding Mix', value: 'coding-mix' }];
 const COUNTS = [5, 10, 15];
 
+const normalizeRoleValue = (value) => {
+  const trimmed = String(value || '').trim();
+  if (!trimmed) return ROLES[0];
+  const match = ROLES.find((role) => role.toLowerCase() === trimmed.toLowerCase());
+  return match || ROLES[0];
+};
+
 const Dashboard = () => {
   const dispatch = useDispatch();
   const navigate = useNavigate();
@@ -46,7 +53,7 @@ const Dashboard = () => {
 
 
   const [formData, setFormData] = useState({
-    role: user?.preferredRole || ROLES[0],
+    role: normalizeRoleValue(user?.preferredRole),
     level: LEVELS[0],
     interviewType: TYPES[1].value,
     count: COUNTS[0],
@@ -64,7 +71,8 @@ const Dashboard = () => {
   }, [isError, message, dispatch]);
 
   const onChange = (e) => {
-    setFormData((prevState) => ({ ...prevState, [e.target.name]: e.target.value }));
+    const value = e.target.name === 'role' ? normalizeRoleValue(e.target.value) : e.target.value;
+    setFormData((prevState) => ({ ...prevState, [e.target.name]: value }));
   }
 
   const onSubmit = (e) => {

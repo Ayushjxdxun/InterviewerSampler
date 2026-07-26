@@ -3,10 +3,39 @@ import axios from 'axios'
 
 const API_URL = `${import.meta.env.VITE_API_URL}/api/users/`;
 
+const normalizePreferredRole = (value) => {
+    const roles = [
+        'MERN Stack Developer',
+        'MEAN Stack Developer',
+        'Full Stack Python',
+        'Full Stack Java',
+        'Frontend Developer',
+        'Backend Developer',
+        'Data Scientist',
+        'Data Analyst',
+        'Machine Learning Engineer',
+        'DevOps Engineer',
+        'Cloud Engineer (AWS/Azure/GCP)',
+        'Cybersecurity Engineer',
+        'Blockchain Developer',
+        'Mobile Developer (iOS/Android)',
+        'Game Developer',
+        'UI/UX Designer',
+        'QA Automation Engineer',
+        'Product Manager'
+    ];
+
+    const trimmed = String(value || '').trim();
+    if (!trimmed) return 'MERN Stack Developer';
+    const match = roles.find((role) => role.toLowerCase() === trimmed.toLowerCase());
+    return match || 'MERN Stack Developer';
+};
+
 const user = JSON.parse(localStorage.getItem('user'));
+const normalizedUser = user ? { ...user, preferredRole: normalizePreferredRole(user.preferredRole) } : null;
 
 const initialState = {
-    user: user ? user : null,
+    user: normalizedUser ? normalizedUser : null,
     isError: false,
     isSuccess: false,
     isLoading: false,
@@ -17,7 +46,11 @@ const initialState = {
 export const register = createAsyncThunk('auth/register', async (userData, thunkAPI) => {
     try {
         const response = await axios.post(`${API_URL}register`, userData);
-        if (response.data) localStorage.setItem('user', JSON.stringify(response.data));
+        if (response.data) {
+            const normalizedPayload = { ...response.data, preferredRole: normalizePreferredRole(response.data.preferredRole) };
+            localStorage.setItem('user', JSON.stringify(normalizedPayload));
+            return normalizedPayload;
+        }
         return response.data;
     } catch (error) {
         const message = (error.response?.data?.message) || error.message || error.toString();
@@ -28,7 +61,11 @@ export const register = createAsyncThunk('auth/register', async (userData, thunk
 export const login = createAsyncThunk('auth/login', async (userData, thunkAPI) => {
     try {
         const response = await axios.post(`${API_URL}login`, userData);
-        if (response.data) localStorage.setItem('user', JSON.stringify(response.data));
+        if (response.data) {
+            const normalizedPayload = { ...response.data, preferredRole: normalizePreferredRole(response.data.preferredRole) };
+            localStorage.setItem('user', JSON.stringify(normalizedPayload));
+            return normalizedPayload;
+        }
         return response.data;
     } catch (error) {
         const message = (error.response?.data?.message) || error.message || error.toString();
@@ -39,7 +76,11 @@ export const login = createAsyncThunk('auth/login', async (userData, thunkAPI) =
 export const googleLogin = createAsyncThunk('auth/googleLogin', async (token, thunkAPI) => {
     try {
         const response = await axios.post(`${API_URL}google`, { token });
-        if (response.data) localStorage.setItem('user', JSON.stringify(response.data));
+        if (response.data) {
+            const normalizedPayload = { ...response.data, preferredRole: normalizePreferredRole(response.data.preferredRole) };
+            localStorage.setItem('user', JSON.stringify(normalizedPayload));
+            return normalizedPayload;
+        }
         return response.data;
     } catch (error) {
         const message = (error.response?.data?.message) || error.message || error.toString();
@@ -56,7 +97,7 @@ export const updateProfile = createAsyncThunk('auth/update', async (userData, th
         const token = thunkAPI.getState().auth.user.token;
         const config = { headers: { Authorization: `Bearer ${token}` } };
         const response = await axios.put(`${API_URL}profile`, userData, config);
-        return response.data;
+        return { ...response.data, preferredRole: normalizePreferredRole(response.data.preferredRole) };
     } catch (error) {
         const message = (error.response?.data?.message) || error.message || error.toString();
         return thunkAPI.rejectWithValue(message);

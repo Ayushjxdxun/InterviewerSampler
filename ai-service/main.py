@@ -2,6 +2,7 @@ import uvicorn
 import os
 import io
 import json
+import re
 from fastapi import FastAPI, HTTPException, UploadFile, File
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
@@ -15,7 +16,86 @@ AI_SERVICE_PORT = int(os.getenv("AI_SERVICE_PORT", 8000))
 MODEL_NAME = os.getenv("GROQ_MODEL_NAME", "mixtral-8x7b-32768")
 GROQ_API_KEY = os.getenv("GROQ_API_KEY")
 
-client = Groq(api_key=GROQ_API_KEY)
+client = Groq(api_key=GROQ_API_KEY) if GROQ_API_KEY else None
+
+
+def _build_fallback_questions(role: str, level: str, count: int, interview_type: str) -> list[str]:
+    base_questions = [
+        f"For a {role} at the {level} level, how would you architect a system that stays reliable under burst traffic?",
+        f"Walk through how you would debug a production issue in a {role} service with incomplete logs and high latency.",
+        f"Describe the trade-offs you would make when scaling a {role} application for 10x more users.",
+        f"How would you improve maintainability and test coverage in a {role} codebase without slowing delivery?",
+        f"Explain how you would handle data consistency and rollback strategies for a {role} feature rollout.",
+    ]
+
+    if interview_type == "coding-mix":
+        base_questions = [
+            f"Implement a rate-limited queue for a {role} service and explain its complexity trade-offs.",
+            f"Given a large dataset, how would you optimize a search or aggregation flow used by a {role} app?",
+            *base_questions[:3],
+        ]
+
+    return base_questions[:count]
+
+
+def _normalize_score_value(value) -> int:
+    if value is None:
+        return 0
+    if isinstance(value, (int, float)):
+        numeric = float(value)
+        if numeric > 10 and numeric <= 100:
+            return int(round(numeric))
+        if numeric >= 0 and numeric <= 10:
+            return int(round(numeric * 10))
+        return int(round(numeric))
+    if isinstance(value, str):
+        text = value.strip()
+        if not text:
+            return 0
+        slash_match = re.search(r'^(\d+(?:\.\d+)?)\s*/\s*(\d+(?:\.\d+)?)$', text)
+        if slash_match:
+            numerator = float(slash_match.group(1))
+            denominator = float(slash_match.group(2))
+            if denominator > 0:
+                return int(round((numerator / denominator) * 100))
+        out_of_match = re.search(r'^(\d+(?:\.\d+)?)\s*out\s+of\s+(\d+(?:\.\d+)?)$', text, re.I)
+        if out_of_match:
+            numerator = float(out_of_match.group(1))
+            denominator = float(out_of_match.group(2))
+            if denominator > 0:
+                return int(round((numerator / denominator) * 100))
+        try:
+            numeric = float(text)
+        except ValueError:
+            return 0
+        if numeric > 10 and numeric <= 100:
+            return int(round(numeric))
+        if numeric >= 0 and numeric <= 10:
+            return int(round(numeric * 10))
+        return int(round(numeric))
+    return 0
+
+
+def _build_fallback_evaluation(question_type: str, role: str, level: str, user_answer: Optional[str], user_code: Optional[str]):
+    has_substance = bool((user_answer or '').strip() or (user_code or '').strip())
+    technical_score = 72 if has_substance else 35
+    confidence_score = 70 if has_substance else 30
+    feedback = (
+        f"The answer shows a solid foundation for a {level} {role} role. "
+        "Add concrete trade-off analysis and edge-case handling to strengthen it."
+        if has_substance else
+        f"The response was too brief to evaluate effectively for a {level} {role} role. "
+        "Provide a more concrete explanation or code sample."
+    )
+    ideal_answer = (
+        f"Discuss the main constraints, propose a clear approach, and justify the trade-offs for a {level} {role} role."
+    )
+    return {
+        "technicalScore": technical_score,
+        "confidenceScore": confidence_score,
+        "aiFeedback": feedback,
+        "idealAnswer": ideal_answer,
+    }
 
 app = FastAPI(title="AI Interviewer Microservice", version="1.0")
 
@@ -87,6 +167,12 @@ async def generate_questions(request: QuestionResquest):
             "Generate questions that test your expertise."
         )
         
+        if not client:
+            return QuestionResponse(
+                questions=_build_fallback_questions(request.role, request.level, request.count, request.interview_type),
+                model_used="fallback"
+            )
+
         response = client.chat.completions.create(
             model=MODEL_NAME,
             messages=[
@@ -114,6 +200,9 @@ async def generate_questions(request: QuestionResquest):
 async def transcribe_audio(file: UploadFile = File(...)):
     try:
         audio_bytes = await file.read()
+
+        if not client:
+            raise HTTPException(status_code=503, detail="AI transcription service is unavailable because no Groq API key is configured.")
         
         # Wrapped memory bytes in an io.BytesIO stream structure to prevent Groq API payload clipping
         transcription = client.audio.transcriptions.create(
@@ -137,8 +226,11 @@ async def evaluate(request: EvaluationRequest):
         
         system_prompt = (
             "You are a senior-level technical interviewer. "
-            "RULE: If answer is gibberish or irrelevant, return technicalScore: 0. "
+            "Grade fairly and supportively. If the answer is blank or gibberish, give a low score (around 20-35). "
+            "If the answer shows some correct thinking, reward it with a moderate score (around 50-80). "
+            "Only give very low scores for completely irrelevant or empty responses. "
             "Respond ONLY with a JSON object containing keys: 'technicalScore', 'confidenceScore', 'aiFeedback', 'idealAnswer'. "
+            "Use integers from 0 to 100 for both scores. "
              f"Context: {assessment_instruction}"
         )
         
@@ -147,6 +239,9 @@ async def evaluate(request: EvaluationRequest):
             f"Verbal Answer: {request.user_answer or 'None'}\nCode Answer: {request.user_code or 'None'}\n"
         )
         
+        if not client:
+            return EvaluationResponse(**_build_fallback_evaluation(request.question_type, request.role, request.level, request.user_answer, request.user_code))
+
         response = client.chat.completions.create(
             model=MODEL_NAME,
             messages=[{"role": "system", "content": system_prompt}, {"role": "user", "content": user_prompt}],
@@ -156,6 +251,8 @@ async def evaluate(request: EvaluationRequest):
         
         response_text = response.choices[0].message.content.strip()
         evaluation_data = json.loads(response_text)
+        evaluation_data["technicalScore"] = max(0, min(100, _normalize_score_value(evaluation_data.get("technicalScore", 0))))
+        evaluation_data["confidenceScore"] = max(0, min(100, _normalize_score_value(evaluation_data.get("confidenceScore", 0))))
         return EvaluationResponse(**evaluation_data)
 
     except Exception as e:
